@@ -1,0 +1,137 @@
+#!/bin/sh
+set -eu
+
+usage() {
+	cat <<'EOF'
+usage: prune [-n DAYS] [-a] [-r] [-d] [-y] [PATH ...]
+
+List (and optionally delete) local git branches whose tip has no recent commit.
+
+  -n DAYS   only branches older than this many days (default 90)
+  -a        include branches merged into the current one
+  -r        also consider remote-tracking branches
+  -d        delete the branches instead of listing them
+  -y        assume yes; needed with -d
+  -h        show this help
+
+Without -a only branches that are unmerged into the current branch are
+reported, so pruning can never drop work you have not merged.
+EOF
+}
+
+days=90
+include_merged=0
+remotes=0
+delete=0
+assume_yes=0
+
+while getopts ':n:ardyh' opt; do
+	case $opt in
+	n) days=$OPTARG ;;
+	a) include_merged=1 ;;
+	r) remotes=1 ;;
+	d) delete=1 ;;
+	y) assume_yes=1 ;;
+	h) usage; exit 0 ;;
+	*) usage >&2; exit 2 ;;
+	esac
+done
+shift $((OPTIND - 1))
+
+case $days in ''|*[!0-9]*) printf 'prune: -n wants a number of days\n' >&2; exit 2 ;; esac
+
+if [ "$delete" -eq 1 ] && [ "$assume_yes" -eq 0 ]; then
+	printf 'prune: refusing to delete without -y; pass -y to confirm\n' >&2
+	exit 2
+fi
+
+if [ "$#" -eq 0 ]; then
+	set -- .
+fi
+
+# epoch seconds on both sides, so awk compares numbers and not strings
+cutoff=$(date -d "$days days ago" '+%s' 2>/dev/null) || {
+	printf 'prune: date(1) cannot go back %s days on this system\n' "$days" >&2
+	exit 1
+}
+
+found_repo=0
+
+for target in "$@"; do
+	# git -C works on a worktree or a .git dir; rev-parse tells us which
+	if git -C "$target" rev-parse --git-dir >/dev/null 2>&1; then
+		repo=$target
+	elif git -C "$target/.git" rev-parse --git-dir >/dev/null 2>&1; then
+		repo=$target/.git
+	else
+		printf 'prune: %s is not a git repository\n' "$target" >&2
+		continue
+	fi
+
+	found_repo=1
+	root=$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null || printf '%s' "$repo")
+	current=$(git -C "$repo" symbolic-ref --quiet --short HEAD 2>/dev/null || printf '')
+
+	if [ "$include_merged" -eq 1 ]; then
+		# -1000 makes every branch count as merged, so -a lists all of them
+		pattern="--merged HEAD -1000 --sort=-committerdate"
+	else
+		pattern="--no-merged HEAD --sort=-committerdate"
+	fi
+
+	if [ "$remotes" -eq 1 ]; then
+		pattern="--remotes $pattern"
+	else
+		pattern="--branches $pattern"
+	fi
+
+	# a single --format: git honours only the last one given, so the ref name
+	# and its date have to travel together in one line
+	# for-each-ref takes ref patterns, not --branches/--remotes
+	if [ "$remotes" -eq 1 ]; then
+		ref_args="refs/heads/ refs/remotes/"
+	else
+		ref_args="refs/heads/"
+	fi
+	ref_args="$ref_args --format=%(refname:short)%09%(committerdate:unix) --sort=-committerdate"
+	[ "$include_merged" -eq 1 ] || ref_args="$ref_args --no-merged HEAD"
+
+	# shellcheck disable=SC2086
+	branches=$(git -C "$repo" for-each-ref $ref_args |
+		awk -F '\t' -v cut="$cutoff" -v keep="$current" '
+			$1 != keep && $2 + 0 < cut + 0 { print $1 }
+		')
+
+	if [ -z "$branches" ]; then
+		continue
+	fi
+
+	if [ "$delete" -eq 0 ]; then
+		found=$(printf '%s\n' "$branches" | grep -c . || true)
+		noun=branches
+		[ "$found" -eq 1 ] && noun=branch
+		printf '%s: %s %s older than %s days\n' "$root" "$found" "$noun" "$days"
+		printf '%s\n' "$branches" | sed 's/^/  /'
+		continue
+	fi
+
+	printf '%s\n' "$branches" | while IFS= read -r branch; do
+		[ -n "$branch" ] || continue
+		if [ "$remotes" -eq 1 ]; then
+			if git -C "$repo" push --quiet origin --delete "$branch" 2>/dev/null; then
+				printf 'deleted remote branch %s (in %s)\n' "$branch" "$root"
+			else
+				printf 'prune: could not delete remote branch %s\n' "$branch" >&2
+			fi
+		else
+			if git -C "$repo" branch -D "$branch" >/dev/null 2>&1; then
+				printf 'deleted branch %s (in %s)\n' "$branch" "$root"
+			else
+				printf 'prune: could not delete branch %s\n' "$branch" >&2
+			fi
+		fi
+	done
+done
+
+# every path we were given was unusable, so nothing was scanned
+[ "$found_repo" -eq 1 ] || exit 1

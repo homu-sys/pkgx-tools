@@ -1,0 +1,7 @@
+name = "prune"
+description = "list or delete stale local git branches"
+payload = "payload/prune-1.0.0"
+
+[versions."1.0.0"]
+description = "stale branch finder; refuses merged work unless asked"
+files = { "bin/prune" = "payload/prune-1.0.0" }

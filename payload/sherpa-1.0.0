@@ -1,0 +1,68 @@
+#!/bin/sh
+set -eu
+
+usage() {
+	cat <<'EOF'
+usage: sherpa [-n COUNT] [-m MIN_KB] [-d] [PATH ...]
+
+Find the largest files under PATH, largest first.
+
+  -n COUNT    how many files to show (default 20)
+  -m MIN_KB   ignore files smaller than this, in KiB (default 0)
+  -d          print the full path; otherwise shorten it relative to $PWD
+  -h          show this help
+
+Sizes are in KiB. Does not follow symlinks.
+EOF
+}
+
+count=20
+min_kb=0
+full=0
+
+while getopts ':n:m:dh' opt; do
+	case $opt in
+	n) count=$OPTARG ;;
+	m) min_kb=$OPTARG ;;
+	d) full=1 ;;
+	h) usage; exit 0 ;;
+	*) usage >&2; exit 2 ;;
+	esac
+done
+shift $((OPTIND - 1))
+
+case $count in ''|*[!0-9]*) printf 'sherpa: -n wants a number\n' >&2; exit 2 ;; esac
+case $min_kb in ''|*[!0-9]*) printf 'sherpa: -m wants a number\n' >&2; exit 2 ;; esac
+
+[ "$count" -eq 0 ] && { printf 'sherpa: -n must be at least 1\n' >&2; exit 2; }
+
+if [ "$#" -eq 0 ]; then
+	set -- .
+fi
+
+# single %s keeps whitespace in filenames intact; awk then splits on whitespace
+find "$@" -type f -printf '%s %p\0' 2>/dev/null |
+	awk -v limit="$min_kb" -v cwd="$(pwd)" '
+		BEGIN { RS = "\0"; ORS = "" }
+		{
+			at = index($0, " ")
+			if (at == 0) next
+			size = substr($0, 1, at - 1)
+			path = substr($0, at + 1)
+			if (size + 0 < limit * 1024) next
+			if (substr(path, 1, 1) != "/") path = cwd "/" path
+			printf "%d\t%s\n", size, path
+		}
+	' |
+	sort -rn |
+	head -n "$count" |
+	awk -F '\t' -v full="$full" -v cwd="$(pwd)" '
+		{
+			path = $2
+			if (!full && index(path, cwd "/") == 1) path = substr(path, length(cwd) + 2)
+			kb = $1 / 1024
+			if (kb >= 1048576) printf "%8.1fG  %s\n", kb / 1048576, path
+			else if (kb >= 1024) printf "%8.1fM  %s\n", kb / 1024, path
+			else printf "%8.1fK  %s\n", kb, path
+		}
+	'

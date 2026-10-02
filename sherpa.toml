@@ -1,0 +1,7 @@
+name = "sherpa"
+description = "find the largest files under a path"
+payload = "payload/sherpa-1.0.0"
+
+[versions."1.0.0"]
+description = "largest files, with a size floor"
+files = { "bin/sherpa" = "payload/sherpa-1.0.0" }
