@@ -1,5 +1,5 @@
 {
-  "base_url": "https://github.com/homu-sys/pkgx-tools/releases/download/v1.0.0/",
+  "base_url": "https://github.com/homu-sys/pkgx-tools/releases/download/v1.1.0/",
   "packages": {
     "dupes": {
       "versions": {
@@ -10,7 +10,7 @@
           "downloads": {
             "bin/dupes": {
               "sha256": "046ea15201a9266ff10d5dc220ffd27ef3749a603c8ab504e1e9b05656cd1983",
-              "url": "https://github.com/homu-sys/pkgx-tools/releases/download/v1.0.0/dupes-1.0.0"
+              "url": "https://github.com/homu-sys/pkgx-tools/releases/download/v1.1.0/dupes-1.0.0"
             }
           }
         }
@@ -22,7 +22,7 @@
           "downloads": {
             "bin/gap": {
               "sha256": "b2428a86baf89f54e861344b7b9bf0d821b90953797ea4b644bc8af38aac2b71",
-              "url": "https://github.com/homu-sys/pkgx-tools/releases/download/v1.0.0/gap-1.0.0"
+              "url": "https://github.com/homu-sys/pkgx-tools/releases/download/v1.1.0/gap-1.0.0"
             }
           }
         }
@@ -34,7 +34,7 @@
           "downloads": {
             "bin/hashes": {
               "sha256": "c993f674dd9fb952dadc4fbd4f192b8551d2d994e55f406c0decbdf05a5a57db",
-              "url": "https://github.com/homu-sys/pkgx-tools/releases/download/v1.0.0/hashes-1.0.0"
+              "url": "https://github.com/homu-sys/pkgx-tools/releases/download/v1.1.0/hashes-1.0.0"
             }
           }
         }
@@ -46,7 +46,31 @@
           "downloads": {
             "bin/ports": {
               "sha256": "5ca1605b212c3320d5c6d743def8512be80b25f76da5486965d415863ffec3a0",
-              "url": "https://github.com/homu-sys/pkgx-tools/releases/download/v1.0.0/ports-1.0.0"
+              "url": "https://github.com/homu-sys/pkgx-tools/releases/download/v1.1.0/ports-1.0.0"
+            }
+          }
+        }
+      }
+    },
+    "prune": {
+      "versions": {
+        "1.0.0": {
+          "downloads": {
+            "bin/prune": {
+              "sha256": "8d9d1d98f7f736f3e2dcdd2c5ce914b463f8a72ec22ba0c7fc1e70b96d11d31f",
+              "url": "https://github.com/homu-sys/pkgx-tools/releases/download/v1.1.0/prune-1.0.0"
+            }
+          }
+        }
+      }
+    },
+    "sherpa": {
+      "versions": {
+        "1.0.0": {
+          "downloads": {
+            "bin/sherpa": {
+              "sha256": "75e6fd7ad319e0d20348dbb1db45e5de11ea8bfce5bf25b97bedeef544465aca",
+              "url": "https://github.com/homu-sys/pkgx-tools/releases/download/v1.1.0/sherpa-1.0.0"
             }
           }
         }
@@ -54,6 +78,6 @@
     }
   },
   "repo": "homu-sys/pkgx-tools",
-  "revision": "v1.0.0",
+  "revision": "v1.1.0",
   "version": 1
 }
