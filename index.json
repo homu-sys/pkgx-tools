@@ -1,0 +1,59 @@
+{
+  "base_url": "https://github.com/homu-sys/pkgx-tools/releases/download/v1.0.0/",
+  "packages": {
+    "dupes": {
+      "versions": {
+        "1.0.0": {
+          "deps": [
+            "hashes>=1.0.0"
+          ],
+          "downloads": {
+            "bin/dupes": {
+              "sha256": "046ea15201a9266ff10d5dc220ffd27ef3749a603c8ab504e1e9b05656cd1983",
+              "url": "https://github.com/homu-sys/pkgx-tools/releases/download/v1.0.0/dupes-1.0.0"
+            }
+          }
+        }
+      }
+    },
+    "gap": {
+      "versions": {
+        "1.0.0": {
+          "downloads": {
+            "bin/gap": {
+              "sha256": "b2428a86baf89f54e861344b7b9bf0d821b90953797ea4b644bc8af38aac2b71",
+              "url": "https://github.com/homu-sys/pkgx-tools/releases/download/v1.0.0/gap-1.0.0"
+            }
+          }
+        }
+      }
+    },
+    "hashes": {
+      "versions": {
+        "1.0.0": {
+          "downloads": {
+            "bin/hashes": {
+              "sha256": "c993f674dd9fb952dadc4fbd4f192b8551d2d994e55f406c0decbdf05a5a57db",
+              "url": "https://github.com/homu-sys/pkgx-tools/releases/download/v1.0.0/hashes-1.0.0"
+            }
+          }
+        }
+      }
+    },
+    "ports": {
+      "versions": {
+        "1.0.0": {
+          "downloads": {
+            "bin/ports": {
+              "sha256": "5ca1605b212c3320d5c6d743def8512be80b25f76da5486965d415863ffec3a0",
+              "url": "https://github.com/homu-sys/pkgx-tools/releases/download/v1.0.0/ports-1.0.0"
+            }
+          }
+        }
+      }
+    }
+  },
+  "repo": "homu-sys/pkgx-tools",
+  "revision": "v1.0.0",
+  "version": 1
+}
