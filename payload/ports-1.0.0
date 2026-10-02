@@ -3,29 +3,26 @@ set -eu
 
 usage() {
 	cat <<'EOF'
-usage: ports [-p PORT] [-a] [-w]
+usage: ports [-p PORT] [-a]
 
 Show listening sockets with the process holding each port.
 
   -p PORT   only rows for this port
   -a        include non-listening (all) sockets
-  -w        no header, no alignment
   -h        show this help
 
-Reads /proc where possible and falls back to ss, netstat or lsof, whichever
-is available.
+Uses ss when present, otherwise netstat or lsof. Sockets owned by other
+users show as "-" because reading their process needs privilege.
 EOF
 }
 
 want_port=""
 all=0
-plain=0
 
-while getopts ':p:awh' opt; do
+while getopts ':p:ah' opt; do
 	case $opt in
 	p) want_port=$OPTARG ;;
 	a) all=1 ;;
-	w) plain=1 ;;
 	h) usage; exit 0 ;;
 	*) usage >&2; exit 2 ;;
 	esac
@@ -65,49 +62,42 @@ rows=$(collect) || {
 
 [ -n "$rows" ] || exit 0
 
-printf '%s\n' "$rows" | awk -v want="$want_port" -v plain="$plain" '
-function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
-
-# strip the pid=(...) decoration ss appends to the process column
+printf '%s\n' "$rows" | awk -v want="$want_port" '
 function cleanproc(s) {
-	s = trim(s)
-	gsub(/^users:\(\(/, "", s)
-	sub(/\)\).*$/, "", s)
-	gsub(/^"/, "", s)
-	sub(/".*$/, "", s)
-	gsub(/,.*$/, "", s)
+	sub(/^.*\(/, "", s)
+	sub(/\).*$/, "", s)
+	gsub(/["\047]/, "", s)
+	sub(/,.*$/, "", s)
 	return s
 }
 
 {
-	proc = cleanproc($NF)
+	proto = tolower($1)
+	sub(/[0-9]+$/, "", proto)
+	if (proto != "tcp" && proto != "udp") next
 
-	if (proc == "*" || proc == "") {
-		# ss without -p, or netstat where the pid column is missing
-		proc = "-"
+	# the process column is only present as users:((...)); anything else in the
+	# last column is the peer address, which is not what we want to print
+	last = $NF
+	proc = "-"
+	if (last ~ /users:\(\(/ || last ~ /^[0-9]+\//) {
+		proc = cleanproc(last)
+		if (proc == "") proc = "-"
 	}
 
-	# find the local address column: the one holding a :port
+	# local address is the first column ending in :digits
 	local = ""
 	for (i = 1; i <= NF; i++) {
-		if ($i ~ /:/ && $i ~ /:[0-9]+$/) { local = $i; break }
+		if ($i ~ /:[0-9]+$/) { local = $i; break }
 	}
 	if (local == "") next
 
 	port = local
 	sub(/^.*:/, "", port)
-
-	proto = tolower($1)
-	gsub(/[^0-9a-z]/, "", proto)
-	if (proto == "" || proto == "tcp" || proto == "udp") { } else { next }
-
 	if (want != "" && port != want) next
-	if (proto != "tcp" && proto != "udp") next
 
-	printf "%5s  %-4s  %s\n", port, proto, proc
+	printf "%5s  %-3s  %-22s  %s\n", port, proto, local, proc
 }
-' | sort -n -k1 | uniq
+' | sort -n -k1 -k3 | uniq
 
-if [ "$plain" -eq 1 ]; then
-	exit 0
-fi
+exit 0
