@@ -1,0 +1,78 @@
+#!/bin/sh
+set -eu
+
+usage() {
+	cat <<'EOF'
+usage: hashes [-a ALGO] FILE...
+
+Print a cryptographic digest per file in `sum` format, so output can be
+checked later with `sha256sum -c` or `shasum -a 256 -c`.
+
+  -a ALGO   md5, sha1, sha256 or sha512   (default sha256)
+  -h        show this help
+
+Missing or unreadable files are reported on stderr; the exit status is 1 if
+any file could not be hashed.
+EOF
+}
+
+die() {
+	printf 'hashes: %s\n' "$1" >&2
+	exit 2
+}
+
+algo=sha256
+
+while getopts ':a:h' opt; do
+	case $opt in
+	a) algo=$OPTARG ;;
+	h) usage; exit 0 ;;
+	*) usage >&2; exit 2 ;;
+	esac
+done
+shift $((OPTIND - 1))
+
+case $algo in
+md5 | sha1 | sha256 | sha512) ;;
+*) die "unknown algorithm: $algo (want md5, sha1, sha256 or sha512)" ;;
+esac
+
+[ $# -gt 0 ] || {
+	usage >&2
+	exit 2
+}
+
+# one tool call for every algorithm rather than a case per file
+finder() {
+	case $algo in
+	md5) printf 'md5sum' ;;
+	sha1) printf 'sha1sum' ;;
+	sha256) printf 'sha256sum' ;;
+	sha512) printf 'sha512sum' ;;
+	esac
+}
+
+command -v "$(finder)" >/dev/null 2>&1 ||
+	die "$(finder) is not installed"
+
+status=0
+for file in "$@"; do
+	if [ ! -f "$file" ]; then
+		printf 'hashes: %s: not a regular file\n' "$file" >&2
+		status=1
+		continue
+	fi
+	if [ ! -r "$file" ]; then
+		printf 'hashes: %s: permission denied\n' "$file" >&2
+		status=1
+		continue
+	fi
+	if ! digest=$("$(finder)" -- "$file" 2>/dev/null); then
+		printf 'hashes: %s: read failed\n' "$file" >&2
+		status=1
+		continue
+	fi
+	printf '%s\n' "$digest"
+done
+
+exit $status

@@ -1,0 +1,113 @@
+#!/bin/sh
+set -eu
+
+usage() {
+	cat <<'EOF'
+usage: ports [-p PORT] [-a] [-w]
+
+Show listening sockets with the process holding each port.
+
+  -p PORT   only rows for this port
+  -a        include non-listening (all) sockets
+  -w        no header, no alignment
+  -h        show this help
+
+Reads /proc where possible and falls back to ss, netstat or lsof, whichever
+is available.
+EOF
+}
+
+want_port=""
+all=0
+plain=0
+
+while getopts ':p:awh' opt; do
+	case $opt in
+	p) want_port=$OPTARG ;;
+	a) all=1 ;;
+	w) plain=1 ;;
+	h) usage; exit 0 ;;
+	*) usage >&2; exit 2 ;;
+	esac
+done
+shift $((OPTIND - 1))
+
+if [ -n "$want_port" ]; then
+	case $want_port in
+	'' | *[!0-9]*)
+		printf 'ports: -p wants a port number, got: %s\n' "$want_port" >&2
+		exit 2
+		;;
+	esac
+fi
+
+state_filter=''
+[ "$all" -eq 1 ] || state_filter='-t state listening'
+
+collect() {
+	if command -v ss >/dev/null 2>&1; then
+		# shellcheck disable=SC2086
+		ss -H -n -tulpn $state_filter 2>/dev/null && return 0
+	fi
+	if command -v netstat >/dev/null 2>&1; then
+		netstat -tulpn 2>/dev/null && return 0
+	fi
+	if command -v lsof >/dev/null 2>&1; then
+		lsof -nP -i -sTCP:LISTEN 2>/dev/null && return 0
+	fi
+	return 1
+}
+
+rows=$(collect) || {
+	printf 'ports: need one of ss, netstat or lsof\n' >&2
+	exit 1
+}
+
+[ -n "$rows" ] || exit 0
+
+printf '%s\n' "$rows" | awk -v want="$want_port" -v plain="$plain" '
+function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
+
+# strip the pid=(...) decoration ss appends to the process column
+function cleanproc(s) {
+	s = trim(s)
+	gsub(/^users:\(\(/, "", s)
+	sub(/\)\).*$/, "", s)
+	gsub(/^"/, "", s)
+	sub(/".*$/, "", s)
+	gsub(/,.*$/, "", s)
+	return s
+}
+
+{
+	proc = cleanproc($NF)
+
+	if (proc == "*" || proc == "") {
+		# ss without -p, or netstat where the pid column is missing
+		proc = "-"
+	}
+
+	# find the local address column: the one holding a :port
+	local = ""
+	for (i = 1; i <= NF; i++) {
+		if ($i ~ /:/ && $i ~ /:[0-9]+$/) { local = $i; break }
+	}
+	if (local == "") next
+
+	port = local
+	sub(/^.*:/, "", port)
+
+	proto = tolower($1)
+	gsub(/[^0-9a-z]/, "", proto)
+	if (proto == "" || proto == "tcp" || proto == "udp") { } else { next }
+
+	if (want != "" && port != want) next
+	if (proto != "tcp" && proto != "udp") next
+
+	printf "%5s  %-4s  %s\n", port, proto, proc
+}
+' | sort -n -k1 | uniq
+
+if [ "$plain" -eq 1 ]; then
+	exit 0
+fi

@@ -1,0 +1,8 @@
+name = "dupes"
+description = "find files with identical contents"
+payload = "payload/dupes-1.0.0"
+
+[versions."1.0.0"]
+description = "size-first grouping, delegates hashing to hashes"
+deps = ["hashes>=1.0.0"]
+files = { "bin/dupes" = "payload/dupes-1.0.0" }

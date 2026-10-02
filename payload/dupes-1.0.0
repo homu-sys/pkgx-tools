@@ -1,0 +1,125 @@
+#!/bin/sh
+set -eu
+
+usage() {
+	cat <<'EOF'
+usage: dupes [-m BYTES] [-l] [DIR]
+
+Find files with identical contents under DIR (default .) and print each
+duplicate group, smallest group first.
+
+Files are grouped by size before hashing, so bytes are only read for files
+that share a size with at least one other file.
+
+  -m BYTES   ignore files smaller than BYTES   (default 1)
+  -l         list only paths, no group headers
+  -h         show this help
+
+Exits 1 when no duplicates were found, so it composes in shell tests.
+
+Paths containing newlines are not handled correctly.
+EOF
+}
+
+min_size=1
+paths_only=0
+
+while getopts ':m:lh' opt; do
+	case $opt in
+	m) min_size=$OPTARG ;;
+	l) paths_only=1 ;;
+	h) usage; exit 0 ;;
+	*) usage >&2; exit 2 ;;
+	esac
+done
+shift $((OPTIND - 1))
+
+root=${1:-.}
+
+[ -d "$root" ] || {
+	printf 'dupes: %s: not a directory\n' "$root" >&2
+	exit 1
+}
+
+case $min_size in
+'' | *[!0-9]*)
+	printf 'dupes: -m wants a byte count, got: %s\n' "$min_size" >&2
+	exit 2
+	;;
+esac
+
+command -v hashes >/dev/null 2>&1 || {
+	printf 'dupes: needs hashes on PATH; install the hashes package\n' >&2
+	exit 1
+}
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT INT TERM
+
+sizes="$work/sizes"
+dup_sizes="$work/dup-sizes"
+files="$work/files"
+digests="$work/digests"
+
+find "$root" -type f -size "+${min_size}c" -exec stat -c '%s	%n' {} + >"$sizes" 2>/dev/null || true
+
+[ -s "$sizes" ] || exit 1
+
+# which sizes are shared by more than one path
+cut -f1 "$sizes" | sort -n | uniq -c | awk '$1 > 1 { print $2 }' >"$dup_sizes"
+
+[ -s "$dup_sizes" ] || exit 1
+
+groups=0
+
+while read -r size; do
+	[ -n "$size" ] || continue
+
+	awk -F'\t' -v want="$size" '$1 == want' "$sizes" | cut -f2- >"$files"
+
+	count=$(wc -l <"$files")
+	[ "$count" -gt 1 ] || continue
+
+	if ! xargs -a "$files" hashes -a sha256 >"$digests" 2>/dev/null; then
+		printf 'dupes: size %s: hashing failed, skipping\n' "$size" >&2
+		continue
+	fi
+
+	sort -k1,1 "$digests" >"$digests.sorted"
+
+	awk '
+		{ digest = $1; $1 = ""; sub(/^[ *]+/, ""); print digest "\t" $0 }
+	' "$digests.sorted" | sort -k1,1 | awk -F'\t' '
+		function flush() {
+			if (n > 1) {
+				printf "%s\n", buf
+				print ""
+			}
+			n = 0
+			buf = ""
+		}
+		$1 != prev {
+			flush()
+			prev = $1
+		}
+		{
+			n++
+			buf = buf (n > 1 ? "\n" : "") $2
+		}
+		END { flush() }
+	' >"$work/groups"
+
+	if [ -s "$work/groups" ]; then
+		if [ "$paths_only" -eq 1 ]; then
+			grep -v '^$' "$work/groups" || true
+		else
+			printf 'duplicate group (%s files, %s bytes each)\n' \
+				"$(grep -c . "$work/groups")" "$size"
+			grep -v '^$' "$work/groups" | sed 's/^/  /'
+			echo
+		fi
+		groups=$((groups + 1))
+	fi
+done <"$dup_sizes"
+
+[ "$groups" -gt 0 ] || exit 1

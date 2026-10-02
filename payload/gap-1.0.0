@@ -1,0 +1,97 @@
+#!/bin/sh
+set -eu
+
+usage() {
+	cat <<'EOF'
+usage: gap [-n LIMIT] [-d] [DIR]
+
+List git repositories under DIR (default .) by how long ago they were last
+committed to, most stale first.
+
+  -n LIMIT   show at most LIMIT repositories   (default 20)
+  -d         show the commit date as well as the age
+  -h         show this help
+
+A repository with no commits yet is reported as "never".
+EOF
+}
+
+limit=20
+show_date=0
+
+while getopts ':n:dh' opt; do
+	case $opt in
+	n) limit=$OPTARG ;;
+	d) show_date=1 ;;
+	h) usage; exit 0 ;;
+	*) usage >&2; exit 2 ;;
+	esac
+done
+shift $((OPTIND - 1))
+
+root=${1:-.}
+
+[ -d "$root" ] || {
+	printf 'gap: %s: not a directory\n' "$root" >&2
+	exit 1
+}
+
+case $limit in
+'' | *[!0-9]*)
+	printf 'gap: -n wants a number, got: %s\n' "$limit" >&2
+	exit 2
+	;;
+esac
+
+command -v git >/dev/null 2>&1 || {
+	printf 'gap: needs git on PATH\n' >&2
+	exit 1
+}
+
+today=$(date +%s) || exit 1
+NEVER=-1
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT INT TERM
+
+find "$root" -type d -name .git -prune 2>/dev/null >"$work/repos" || true
+
+while read -r gitdir; do
+	[ -n "$gitdir" ] || continue
+	repo=${gitdir%/.git}
+
+	stamp=$(git -C "$repo" log -1 --format=%ct 2>/dev/null || true)
+
+	if [ -z "$stamp" ]; then
+		dirty=$(git -C "$repo" status --porcelain 2>/dev/null | wc -l)
+		printf '%s\t%s\t%s\t%s\n' "$NEVER" "$(date +%Y-%m-%d)" "$dirty" "$repo" >>"$work/out"
+		continue
+	fi
+
+	age=$(( (today - stamp) / 86400 ))
+	dirty=$(git -C "$repo" status --porcelain 2>/dev/null | wc -l)
+	when=$(date -d "@$stamp" +%Y-%m-%d 2>/dev/null || printf 'unknown')
+	printf '%s\t%s\t%s\t%s\n' "$age" "$when" "$dirty" "$repo" >>"$work/out"
+done <"$work/repos"
+
+[ -s "$work/out" ] || exit 0
+
+sort -t"$(printf '\t')" -k1,1nr -k4,4 "$work/out" | head -n "$limit" | while IFS="$(printf '\t')" read -r age when dirty repo; do
+	if [ "$age" = "$NEVER" ]; then
+		age_text="never"
+	elif [ "$age" -eq 0 ] 2>/dev/null; then
+		age_text="today"
+	elif [ "$age" -eq 1 ] 2>/dev/null; then
+		age_text="1 day"
+	else
+		age_text="$age days"
+	fi
+
+	mark=""
+	[ "$dirty" -gt 0 ] && mark=" ($dirty uncommitted)"
+
+	if [ "$show_date" -eq 1 ]; then
+		printf '%-9s  %-10s  %s%s\n' "$age_text" "$when" "$repo" "$mark"
+	else
+		printf '%-9s  %s%s\n' "$age_text" "$repo" "$mark"
+	fi
+done

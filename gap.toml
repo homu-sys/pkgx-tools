@@ -1,0 +1,7 @@
+name = "gap"
+description = "list git repos by how long since they were last committed to"
+payload = "payload/gap-1.0.0"
+
+[versions."1.0.0"]
+description = "stale-repo finder for a whole tree"
+files = { "bin/gap" = "payload/gap-1.0.0" }

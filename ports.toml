@@ -1,0 +1,7 @@
+name = "ports"
+description = "show what is listening on each port"
+payload = "payload/ports-1.0.0"
+
+[versions."1.0.0"]
+description = "ss with netstat and lsof fallbacks"
+files = { "bin/ports" = "payload/ports-1.0.0" }
